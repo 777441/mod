@@ -38,27 +38,6 @@ public class UnlockDexMod implements ClientModInitializer {
         });
     }
 
-    // 获取玩家名称的工具方法
-    private static String getPlayerName() {
-        try {
-            // 尝试获取Minecraft实例
-            Class<?> minecraftClass = Class.forName("net.minecraft.client.Minecraft");
-            Method getInstanceMethod = minecraftClass.getMethod("getInstance");
-            Object minecraft = getInstanceMethod.invoke(null);
-
-            // 尝试获取玩家
-            Method getPlayerMethod = minecraftClass.getMethod("getPlayer");
-            Object player = getPlayerMethod.invoke(minecraft);
-
-            // 获取玩家名称
-            Method getNameMethod = player.getClass().getMethod("getName");
-            return (String) getNameMethod.invoke(player);
-        } catch (Exception e) {
-            LOGGER.warn("获取玩家名称失败: " + e.getMessage());
-            return "Player"; // 返回默认名称
-        }
-    }
-
     public static void unlockAllPokemonClientSide() {
         try {
             LOGGER.info("开始尝试解锁图鉴...");
@@ -97,14 +76,10 @@ public class UnlockDexMod implements ClientModInitializer {
             caughtField.setAccessible(true);
             Object caughtValue = caughtField.get(null);
 
-            // 5. 获取直接操作图鉴的方法
-            Method unlockSpeciesMethod = null;
-            try {
-                // 尝试查找直接解锁宝可梦的方法
-                unlockSpeciesMethod = clientPokedexManager.getClass().getMethod("unlockSpecies", Identifier.class);
-                LOGGER.info("找到直接解锁方法: unlockSpecies");
-            } catch (NoSuchMethodException e) {
-                LOGGER.info("未找到直接解锁方法，将使用详细解锁流程");
+            // 5. 打印ClientPokedexManager的所有方法，帮助调试
+            LOGGER.info("ClientPokedexManager方法:");
+            for (Method method : clientPokedexManager.getClass().getMethods()) {
+                LOGGER.info("方法: " + method.getName() + " 返回类型: " + method.getReturnType().getName());
             }
 
             // 6. 解锁所有宝可梦
@@ -119,13 +94,6 @@ public class UnlockDexMod implements ClientModInitializer {
                     Method getNameMethod = pokemonSpeciesClass.getMethod("getName");
                     String speciesName = (String) getNameMethod.invoke(species);
                     LOGGER.info("处理宝可梦: " + speciesName + " (ID: " + speciesId + ")");
-
-                    // 如果找到了直接解锁方法，使用它
-                    if (unlockSpeciesMethod != null) {
-                        unlockSpeciesMethod.invoke(clientPokedexManager, speciesId);
-                        count++;
-                        continue;
-                    }
 
                     // 获取或创建宝可梦记录
                     Method getOrCreateSpeciesRecordMethod = clientPokedexManager.getClass().getMethod("getOrCreateSpeciesRecord", speciesId.getClass());
@@ -235,60 +203,7 @@ public class UnlockDexMod implements ClientModInitializer {
                 }
             }
 
-            // 7. 尝试使用更直接的方法解锁所有图鉴
-            try {
-                Method unlockAllMethod = clientPokedexManager.getClass().getMethod("unlockAll");
-                if (unlockAllMethod != null) {
-                    LOGGER.info("找到unlockAll方法，尝试直接解锁所有图鉴");
-                    unlockAllMethod.invoke(clientPokedexManager);
-                }
-            } catch (NoSuchMethodException e) {
-                LOGGER.info("未找到unlockAll方法，继续使用常规解锁流程");
-            } catch (Exception e) {
-                LOGGER.warn("使用unlockAll方法失败: " + e.getMessage());
-            }
-
-            // 8. 尝试使用PokedexManager保存图鉴数据
-            try {
-                // 尝试获取PokedexManager实例
-                Class<?> pokedexManagerClass = Class.forName("com.cobblemon.mod.common.api.pokedex.PokedexManager");
-                Field pokedexManagerInstanceField = pokedexManagerClass.getDeclaredField("INSTANCE");
-                pokedexManagerInstanceField.setAccessible(true);
-                Object pokedexManager = pokedexManagerInstanceField.get(null);
-
-                LOGGER.info("获取到PokedexManager实例: " + pokedexManager);
-
-                if (pokedexManager != null) {
-                    // 尝试获取玩家的图鉴数据
-                    Method getPlayerDataMethod = pokedexManagerClass.getMethod("getPlayerData", String.class);
-                    Object playerData = getPlayerDataMethod.invoke(pokedexManager, getPlayerName());
-
-                    if (playerData != null) {
-                        LOGGER.info("获取到玩家图鉴数据");
-
-                        // 尝试将客户端图鉴数据同步到PokedexManager
-                        Method syncMethod = pokedexManagerClass.getMethod("syncToManager", clientPokedexManager.getClass());
-                        if (syncMethod != null) {
-                            syncMethod.invoke(pokedexManager, clientPokedexManager);
-                            LOGGER.info("已将客户端图鉴数据同步到PokedexManager");
-                        }
-
-                        // 尝试保存图鉴数据
-                        Method saveMethod = pokedexManagerClass.getMethod("save");
-                        saveMethod.invoke(pokedexManager);
-                        LOGGER.info("已通过PokedexManager保存图鉴数据");
-
-                        // 尝试广播图鉴更新
-                        Method broadcastUpdateMethod = pokedexManagerClass.getMethod("broadcastUpdate", String.class);
-                        broadcastUpdateMethod.invoke(pokedexManager, getPlayerName());
-                        LOGGER.info("已广播图鉴更新");
-                    }
-                }
-            } catch (Exception e) {                LOGGER.warn("使用PokedexManager保存图鉴数据失败: " + e.getMessage());
-                e.printStackTrace();
-            }
-
-            // 9. 清除计算值缓存
+            // 7. 清除计算值缓存
             try {
                 Method clearCalculatedValuesMethod = clientPokedexManager.getClass().getMethod("clearCalculatedValues");
                 clearCalculatedValuesMethod.invoke(clientPokedexManager);
@@ -297,7 +212,7 @@ public class UnlockDexMod implements ClientModInitializer {
                 LOGGER.warn("清除计算值缓存失败: " + e.getMessage());
             }
 
-            // 10. 标记为已修改
+            // 8. 标记为已修改
             try {
                 Method markDirtyMethod = clientPokedexManager.getClass().getMethod("markDirty");
                 markDirtyMethod.invoke(clientPokedexManager);
@@ -306,7 +221,7 @@ public class UnlockDexMod implements ClientModInitializer {
                 LOGGER.warn("标记图鉴数据为已修改失败: " + e.getMessage());
             }
 
-            // 11. 保存图鉴数据
+            // 9. 保存图鉴数据
             try {
                 Method saveMethod = clientPokedexManager.getClass().getMethod("save");
                 saveMethod.invoke(clientPokedexManager);
@@ -315,113 +230,7 @@ public class UnlockDexMod implements ClientModInitializer {
                 LOGGER.warn("保存图鉴数据失败: " + e.getMessage());
             }
 
-            // 12. 尝试发送网络包通知服务器
-            try {
-                Class<?> networkClass = Class.forName("com.cobblemon.mod.common.api.net.NetworkManager");
-                Field instanceField2 = networkClass.getDeclaredField("INSTANCE");
-                instanceField2.setAccessible(true);
-                Object networkManager = instanceField2.get(null);
-
-                Method sendPacketMethod = networkClass.getMethod("sendToServer", Class.forName("com.cobblemon.mod.common.api.net.NetworkPacket"));
-
-                // 尝试创建同步图鉴的数据包
-                Class<?> syncPacketClass = Class.forName("com.cobblemon.mod.common.api.pokedex.SyncPokedexPacket");
-                Object syncPacket = syncPacketClass.getDeclaredConstructor().newInstance();
-
-                sendPacketMethod.invoke(networkManager, syncPacket);
-                LOGGER.info("已发送图鉴同步数据包到服务器");
-            } catch (Exception e) {
-                LOGGER.warn("发送图鉴同步数据包失败: " + e.getMessage());
-            }
-
-            // 13. 尝试强制刷新客户端UI
-            try {
-                // 尝试获取刷新UI的方法
-                Method refreshUIMethod = clientPokedexManager.getClass().getMethod("refreshUI");
-                refreshUIMethod.invoke(clientPokedexManager);
-                LOGGER.info("已刷新图鉴UI");
-            } catch (NoSuchMethodException e) {
-                LOGGER.info("未找到refreshUI方法，尝试其他方式刷新UI");
-                try {
-                    // 尝试获取其他可能的UI刷新方法
-                    Method updateUIMethod = clientPokedexManager.getClass().getMethod("updateUI");
-                    updateUIMethod.invoke(clientPokedexManager);
-                    LOGGER.info("已通过updateUI方法刷新图鉴UI");
-                } catch (Exception ex) {
-                    LOGGER.warn("刷新图鉴UI失败: " + ex.getMessage());
-                }
-            } catch (Exception e) {
-                LOGGER.warn("刷新图鉴UI失败: " + e.getMessage());
-            }
-
-            // 14. 尝试直接修改完成度统计
-            try {
-                Method getCompletionStatsMethod = clientPokedexManager.getClass().getMethod("getCompletionStats");
-                Object completionStats = getCompletionStatsMethod.invoke(clientPokedexManager);
-
-                if (completionStats != null) {
-                    // 尝试设置完成度为100%
-                    Class<?> completionStatsClass = completionStats.getClass();
-                    Field seenField = completionStatsClass.getDeclaredField("seen");
-                    caughtField = completionStatsClass.getDeclaredField("caught");
-
-                    seenField.setAccessible(true);
-                    caughtField.setAccessible(true);
-
-                    // 获取总数
-                    Field totalField = completionStatsClass.getDeclaredField("total");
-                    totalField.setAccessible(true);
-                    int total = (int) totalField.get(completionStats);
-
-                    // 设置为全部已见到和已捕获
-                    seenField.set(completionStats, total);
-                    caughtField.set(completionStats, total);
-
-                    LOGGER.info("已直接修改完成度统计为100%");
-                }
-            } catch (Exception e) {
-                LOGGER.warn("修改完成度统计失败: " + e.getMessage());
-            }
-
-            // 15. 尝试触发成就解锁
-            try {
-                Class<?> achievementClass = Class.forName("com.cobblemon.mod.common.api.achievements.AchievementManager");
-                Field instanceField3 = achievementClass.getDeclaredField("INSTANCE");
-                instanceField3.setAccessible(true);
-                Object achievementManager = instanceField3.get(null);
-
-                Method unlockPokedexAchievementsMethod = achievementClass.getMethod("unlockPokedexAchievements");
-                if (unlockPokedexAchievementsMethod != null) {
-                    unlockPokedexAchievementsMethod.invoke(achievementManager);
-                    LOGGER.info("已触发图鉴相关成就解锁");
-                }
-            } catch (Exception e) {
-                LOGGER.warn("触发图鉴成就解锁失败: " + e.getMessage());
-            }
-
-            // 16. 最后再次保存确保数据持久化
-            try {
-                // 尝试使用更强力的保存方法
-                Method forceSaveMethod = clientPokedexManager.getClass().getMethod("forceSave");
-                if (forceSaveMethod != null) {
-                    forceSaveMethod.invoke(clientPokedexManager);
-                    LOGGER.info("已强制保存图鉴数据");
-                }
-            } catch (NoSuchMethodException e) {
-                // 如果没有forceSave方法，再次调用普通save方法
-                try {
-                    Method saveMethod = clientPokedexManager.getClass().getMethod("save");
-                    saveMethod.invoke(clientPokedexManager);
-                    LOGGER.info("已再次保存图鉴数据");
-                } catch (Exception ex) {
-                    LOGGER.warn("再次保存图鉴数据失败: " + ex.getMessage());
-                }
-            } catch (Exception e) {
-                LOGGER.warn("强制保存图鉴数据失败: " + e.getMessage());
-            }
-
             LOGGER.info("客户端图鉴已全部解锁，共解锁 " + count + " 个宝可梦");
-
         } catch (Exception e) {
             LOGGER.error("解锁图鉴时发生错误: " + e.getMessage());
             e.printStackTrace();
